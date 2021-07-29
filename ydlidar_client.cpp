@@ -16,12 +16,15 @@
 #include <vector>
 #include <deque>
 #include <algorithm>
+#define DEQUE_SIZE 7 // deque 크기 설정 : 0.125초 단위로 갱신
 #define DIV 1 // 몇 도 단위로 데이터를 기록할 것인가
-#define DIR 5 // 구간 나누기
 #define SIZE 360/DIV // 나누어진 각도 단위
-#define DEQUE_SIZE 4 // deque 크기 설정
-std::deque<std::vector<int>> dng_dir; // 위험 정보
-std::vector<int> dir_sum(DIR, 0); // 위험 정보 합
+#define DIR 5 // 구간 나누기
+#define DIST 4 // 위험정보 구분 : 0.5m, 1m, 3m, 10m
+std::string dir_str[DIR] = {"좌측", "좌측 후방", "후방 정면", "우측 후방", "우측"}; // 방향 문자열
+std::string dist_str[DIST] = {"0.5m 이내", "1m 이내", "3m 이내", "10m 이내"}; // 거리 문자열
+std::deque<std::vector<std::vector<int>>> dng_dir; // 위험 정보 [저장순서][방향][거리]
+std::deque<std::vector<std::vector<int>>> dng_dir_cnt; // 위험 정보 카운트 [저장순서][방향][거리]
 std::deque<std::vector<float>> position; // 위치정보 [저장순서][각도]
 std::deque<std::vector<float>> velocity; // 속도정보 [저장순서][각도]
 std::deque<std::vector<float>> acceleration; // 가속도정보 [저장순서][각도]
@@ -38,18 +41,19 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
     // 함수에서 사용할 변수 선언
     float cnt_sum = 0.; // 사용 가능한 데이터 개수
     float cnt_fail = 0.; // 사용 불가능한 데이터 개수
-    std::vector<int> dir(DIR, 0); // 임시 위험 정보
+    std::vector<std::vector<int>> dir(DIR, std::vector<int>(DIST, 0)); // 임시 위험 정보 [방향][거리]
+    std::vector<std::vector<int>> dir_cnt(DIR-1, std::vector<int>(DIST-1, 0)); // 임시 위험 정보 합 [방향][거리]
     std::vector<float> ang_dist(SIZE, 0); // 거리의 합
     std::vector<float> cnt(SIZE, 0); // 데이터 개수
     std::vector<float> mn_dist(SIZE, 0); // 거리의 평균 (거리의 합 / 데이터 개수)
     std::vector<float> ang_vel(SIZE, 0); // 속도 저장
     std::vector<float> ang_acl(SIZE, 0); // 가속도 저장
     ros::Duration time_tmp=scan->header.stamp - begin; // client 시작 이후로 경과한 시간
-    
+
     // 오래된 데이터 삭제
     if (position.size()==DEQUE_SIZE) { // deque 크기 제한을 초과하면
-        for(int i = 0; i < DIR; i++) {dir_sum[i] -= dng_dir[0][i];}
         dng_dir.pop_front(); // 위험 정보 삭제
+        dng_dir_cnt.pop_front(); // 위험 정보 합 삭제
         position.pop_front(); // 오래된 위치 정보 삭제
         velocity.pop_front(); // 오래된 속도 정보 삭제
         acceleration.pop_front(); // 오래된 가속도 정보 삭제
@@ -94,12 +98,27 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
     // 필터링
     for(int i = 0; i < SIZE; i++) {
-        if (ang_vel[i] > 0.5 && ang_vel[i] < 3.5 && ang_acl[i] < 3.5 && ang_acl[i] > 0) {
-        //if (i*DIV < 190 && i*DIV > 155) {
+        if (ang_vel[i] < 3.5 && ang_acl[i] < 3.5 && ang_acl[i] > 0) { // 튀는 값 걸러내기
             int ang_tmp = i*DIV - 40;
             if (ang_tmp >= 0 && ang_tmp < 270){
-                dir[ang_tmp / 54]++;
-                dir_sum[ang_tmp / 54]++;
+                ang_tmp /= 270/DIR;
+                if (ang_vel[i] > 0.35 && mn_dist[i] < 0.5) { // 속도 0.5m/s 이상 거리 0.5m 이내
+                    dir[ang_tmp][0]++;
+                }
+                else if (ang_vel[i] > 0.5 && mn_dist[i] < 1) { // 속도 0.7m/s 이상 거리 1m 이내
+                    dir[ang_tmp][1]++;
+                }
+                else if (ang_vel[i] > 0.7 && mn_dist[i] < 3) { // 속도 1.0m/s 이상 거리 3m 이내
+                    dir[ang_tmp][2]++;
+                }
+                else if (ang_vel[i] > 1.5 && mn_dist[i] < 10) { // 속도 2.0m/s 이상 거리 10m 이내
+                    dir[ang_tmp][3]++;
+                }
+            }
+            for(int j=0; j<DIR-1; j++){
+                for(int k=0; k<DIST-1; k++){
+                    dir_cnt[j][k] += dir[j][k] + dir[j+1][k] + dir[j][k+1] + dir[j+1][k+1];
+                }
             }
             //printf("ang pos vel acl time : %3d, %9.6f %9.6f %9.6f %f\n", i*DIV, mn_dist[i], ang_vel[i], ang_acl[i], time_tmp.toSec());
         }
@@ -107,20 +126,34 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
     // 위험, 위치, 속도, 가속도, 시간 정보 갱신
     dng_dir.push_back(dir); // 위험 정보 갱신
+    dng_dir_cnt.push_back(dir_cnt); // 위험 정보 합 갱신
     position.push_back(mn_dist); // 위치 정보 갱신
     velocity.push_back(ang_vel); // 속도 정보 갱신
     acceleration.push_back(ang_vel); // 가속도 정보 갱신
     time_info.push_back(time_tmp); // 시간 정보 갱신
 
-    // 위험 정보 총 합
-    printf("왼쪽 : %3d, 왼쪽뒤 : %3d, 뒤쪽 : %3d, 오른쪽뒤 : %3d, 오른쪽 : %3d\n", dir_sum[0], dir_sum[1], dir_sum[2], dir_sum[3], dir_sum[4]);
+    // 덱에 쌓인 위험 신호 체크
+    std::vector<std::vector<int>> counting_danger(DIR-1, std::vector<int>(DIST-1, 0)); // 덱에 쌓인 위험 신호 카운트
+    for (int i=0; i<dng_dir_cnt.size(); i++){
+        for (int j=0; j<DIR-1; j++){
+            for (int k=0; k<DIST-1; k++){
+                if (dng_dir_cnt[i][j][k] > 0) counting_danger[j][k]++;
+                if (counting_danger[j][k] == DEQUE_SIZE-1){
+                    for (int m=j; m<j+2; m++){
+                        for (int n=k; n<k+2; n++){
+                            if (dir[m][n] > 0) std::cout << dir_str[m] << " " << dist_str[n] << " " << dir[m][n] << "개 각도에서 위험 감지!!\n";
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /*// 축적한 데이터 출력하기
     for(int i = 0; i < position.size(); i++) {
         for (int j = 0; j < SIZE; j++){
-            if (j%3==0)) {
-                printf("ang pos vel acl : %3d %9.6f %9.6f %9.6f   ", j*DIV, position[i][j], velocity[i][j], acceleration[i][j]);
-            }
+            if (j%3==0) printf("\n");
+            printf("ang pos vel acl : %3d %9.6f %9.6f %9.6f   ", j*DIV, position[i][j], velocity[i][j], acceleration[i][j]);
         }
         std::cout << "\n" << "deque num : " << i << ", time_info : " << time_info[i];
         if (i>0) std::cout << ", time_inc : " << time_info[i]-time_info[i-1];
