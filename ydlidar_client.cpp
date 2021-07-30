@@ -16,13 +16,13 @@
 #include <vector>
 #include <deque>
 #include <algorithm>
-#define DEQUE_SIZE 7 // deque 크기 설정 : 0.125초 단위로 갱신
+#define DEQUE_SIZE 6 // deque 크기 설정 : 0.125초 단위로 갱신
 #define DIV 1 // 몇 도 단위로 데이터를 기록할 것인가
 #define SIZE 360/DIV // 나누어진 각도 단위
-#define DIR 5 // 구간 나누기
-#define DIST 4 // 위험정보 구분 : 0.5m, 1m, 3m, 10m
+#define DIR 5 // 구간 나누기 : 좌측, 좌측 후방, 후방 정면, 우측 후방, 우측
+#define DIST 9 // 거리 나누기 : 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m
 std::string dir_str[DIR] = {"좌측", "좌측 후방", "후방 정면", "우측 후방", "우측"}; // 방향 문자열
-std::string dist_str[DIST] = {"0.5m 이내", "1m 이내", "3m 이내", "10m 이내"}; // 거리 문자열
+std::string dist_str[DIST] = {"1m 이내", "2m 이내", "3m 이내", "4m 이내", "5m 이내", "6m 이내", "7m 이내", "8m 이내", "9m 이내"}; // 거리 문자열
 std::deque<std::vector<std::vector<int>>> dng_dir; // 위험 정보 [저장순서][방향][거리]
 std::deque<std::vector<std::vector<int>>> dng_dir_cnt; // 위험 정보 카운트 [저장순서][방향][거리]
 std::deque<std::vector<float>> position; // 위치정보 [저장순서][각도]
@@ -98,20 +98,35 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
     // 필터링
     for(int i = 0; i < SIZE; i++) {
-        if (ang_vel[i] < 3.5 && ang_acl[i] < 3.5 && ang_acl[i] > 0) { // 튀는 값 걸러내기
+        if (ang_vel[i] < 3.5 && ang_acl[i] < 2.5 && ang_acl[i] > 0) { // 튀는 값 걸러내기
             int ang_tmp = i*DIV - 40;
             if (ang_tmp >= 0 && ang_tmp < 270){
                 ang_tmp /= 270/DIR;
-                if (ang_vel[i] > 0.35 && mn_dist[i] < 0.5) { // 속도 0.5m/s 이상 거리 0.5m 이내
+                if (ang_vel[i] > 0.5 && mn_dist[i] < 1) { // 속도 0.5m/s 이상 거리 1m 이내
                     dir[ang_tmp][0]++;
                 }
-                else if (ang_vel[i] > 0.5 && mn_dist[i] < 1) { // 속도 0.7m/s 이상 거리 1m 이내
+                else if (ang_vel[i] > 0.6 && mn_dist[i] < 2) { // 속도 0.6m/s 이상 거리 2m 이내
                     dir[ang_tmp][1]++;
                 }
-                else if (ang_vel[i] > 0.7 && mn_dist[i] < 3) { // 속도 1.0m/s 이상 거리 3m 이내
+                else if (ang_vel[i] > 0.7 && mn_dist[i] < 3) { // 속도 0.7m/s 이상 거리 3m 이내
                     dir[ang_tmp][2]++;
                 }
-                else if (ang_vel[i] > 1.5 && mn_dist[i] < 10) { // 속도 2.0m/s 이상 거리 10m 이내
+                else if (ang_vel[i] > 0.8 && mn_dist[i] < 4) { // 속도 0.8m/s 이상 거리 4m 이내
+                    dir[ang_tmp][3]++;
+                }
+                else if (ang_vel[i] > 0.9 && mn_dist[i] < 5) { // 속도 0.9m/s 이상 거리 5m 이내
+                    dir[ang_tmp][3]++;
+                }
+                else if (ang_vel[i] > 1.0 && mn_dist[i] < 6) { // 속도 1.0m/s 이상 거리 6m 이내
+                    dir[ang_tmp][3]++;
+                }
+                else if (ang_vel[i] > 1.1 && mn_dist[i] < 7) { // 속도 1.1m/s 이상 거리 7m 이내
+                    dir[ang_tmp][3]++;
+                }
+                else if (ang_vel[i] > 1.2 && mn_dist[i] < 8) { // 속도 1.2m/s 이상 거리 8m 이내
+                    dir[ang_tmp][3]++;
+                }
+                else if (ang_vel[i] > 1.3 && mn_dist[i] < 9) { // 속도 1.3m/s 이상 거리 9m 이내
                     dir[ang_tmp][3]++;
                 }
             }
