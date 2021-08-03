@@ -15,8 +15,8 @@
 // 수정 코드
 #include <vector>
 #include <deque>
-#include <algorithm>
 #define DEQUE_SIZE 6 // deque 크기 설정 : 0.125초 단위로 갱신
+#define MIN_SPEED 0.5 // 속도 감지 역치
 #define DIV 1 // 몇 도 단위로 데이터를 기록할 것인가
 #define SIZE 360/DIV // 나누어진 각도 단위
 #define DIR 5 // 구간 나누기 : 좌측, 좌측 후방, 후방 정면, 우측 후방, 우측
@@ -98,44 +98,22 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
     // 필터링
     for(int i = 0; i < SIZE; i++) {
-        if (ang_vel[i] < 3.5 && ang_acl[i] < 2.5 && ang_acl[i] > 0) { // 튀는 값 걸러내기
+        if (mn_dist[i] != 0 && ang_acl[i] != 0 && ang_acl[i] < 3.5 && ang_acl[i] > -3.5) { // 튀는 값 걸러내기
             int ang_tmp = i*DIV - 40;
-            if (ang_tmp >= 0 && ang_tmp < 270){
+            if (ang_tmp >= 0 && ang_tmp < 270) {
                 ang_tmp /= 270/DIR;
-                if (ang_vel[i] > 0.5 && mn_dist[i] < 1) { // 속도 0.5m/s 이상 거리 1m 이내
-                    dir[ang_tmp][0]++;
-                }
-                else if (ang_vel[i] > 0.6 && mn_dist[i] < 2) { // 속도 0.6m/s 이상 거리 2m 이내
-                    dir[ang_tmp][1]++;
-                }
-                else if (ang_vel[i] > 0.7 && mn_dist[i] < 3) { // 속도 0.7m/s 이상 거리 3m 이내
-                    dir[ang_tmp][2]++;
-                }
-                else if (ang_vel[i] > 0.8 && mn_dist[i] < 4) { // 속도 0.8m/s 이상 거리 4m 이내
-                    dir[ang_tmp][3]++;
-                }
-                else if (ang_vel[i] > 0.9 && mn_dist[i] < 5) { // 속도 0.9m/s 이상 거리 5m 이내
-                    dir[ang_tmp][3]++;
-                }
-                else if (ang_vel[i] > 1.0 && mn_dist[i] < 6) { // 속도 1.0m/s 이상 거리 6m 이내
-                    dir[ang_tmp][3]++;
-                }
-                else if (ang_vel[i] > 1.1 && mn_dist[i] < 7) { // 속도 1.1m/s 이상 거리 7m 이내
-                    dir[ang_tmp][3]++;
-                }
-                else if (ang_vel[i] > 1.2 && mn_dist[i] < 8) { // 속도 1.2m/s 이상 거리 8m 이내
-                    dir[ang_tmp][3]++;
-                }
-                else if (ang_vel[i] > 1.3 && mn_dist[i] < 9) { // 속도 1.3m/s 이상 거리 9m 이내
-                    dir[ang_tmp][3]++;
+                for (int j=0; j<DIST; j++){
+                    if (ang_vel[i] > MIN_SPEED + j*0.2 && mn_dist[i] < j) {
+                        dir[ang_tmp][j]++;
+                        printf("거리 : %f, 속도 : %f, 가속도 : %f\n", mn_dist[i], ang_vel[i], ang_acl[i]);
+                    }
                 }
             }
             for(int j=0; j<DIR-1; j++){
                 for(int k=0; k<DIST-1; k++){
-                    dir_cnt[j][k] += dir[j][k] + dir[j+1][k] + dir[j][k+1] + dir[j+1][k+1];
+                    dir_cnt[j][k] += dir[j][k] + dir[j+1][k] + dir[j][k+1] + dir[j+1][k+1]; // 4개 단위로 검사
                 }
             }
-            //printf("ang pos vel acl time : %3d, %9.6f %9.6f %9.6f %f\n", i*DIV, mn_dist[i], ang_vel[i], ang_acl[i], time_tmp.toSec());
         }
     }
 
@@ -149,14 +127,16 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
     // 덱에 쌓인 위험 신호 체크
     std::vector<std::vector<int>> counting_danger(DIR-1, std::vector<int>(DIST-1, 0)); // 덱에 쌓인 위험 신호 카운트
-    for (int i=0; i<dng_dir_cnt.size(); i++){
-        for (int j=0; j<DIR-1; j++){
-            for (int k=0; k<DIST-1; k++){
+    for (int i=0; i<dng_dir_cnt.size(); i++) {
+        for (int j=0; j<DIR-1; j++) {
+            for (int k=0; k<DIST-1; k++) {
                 if (dng_dir_cnt[i][j][k] > 0) counting_danger[j][k]++;
                 if (counting_danger[j][k] == DEQUE_SIZE-1){
                     for (int m=j; m<j+2; m++){
                         for (int n=k; n<k+2; n++){
-                            if (dir[m][n] > 0) std::cout << dir_str[m] << " " << dist_str[n] << " " << dir[m][n] << "개 각도에서 위험 감지!!\n";
+                            if (dir[m][n] > 0) {
+                                std::cout << dir_str[m] << " " << dist_str[n] << " " << dir[m][n] << "개 각도에서 위험 감지!!\n";
+                            }
                         }
                     }
                 }

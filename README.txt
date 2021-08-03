@@ -1,4 +1,6 @@
 
+라이다와 rviz 동시 실행
+roslaunch ydlidar lidar_view.launch
 라이다 실행
 roslaunch ydlidar lidar.launch
 라이다 값 받아보기
