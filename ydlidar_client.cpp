@@ -15,16 +15,16 @@
 // 수정 코드
 #include <vector>
 #include <deque>
-#define DEQUE_SIZE 6 // deque 크기 설정 : 0.125초 단위로 갱신
-#define MIN_SPEED 0.5 // 속도 감지 역치
+#define DEQUE_SIZE 4 // deque 크기 설정 : 0.125초 단위로 갱신
+#define MIN_SPEED 1.2 // 속도 감지 역치
 #define DIV 1 // 몇 도 단위로 데이터를 기록할 것인가
 #define SIZE 360/DIV // 나누어진 각도 단위
 #define DIR 5 // 구간 나누기 : 좌측, 좌측 후방, 후방 정면, 우측 후방, 우측
 #define DIST 9 // 거리 나누기 : 1m, 2m, 3m, 4m, 5m, 6m, 7m, 8m, 9m
 std::string dir_str[DIR] = {"좌측", "좌측 후방", "후방 정면", "우측 후방", "우측"}; // 방향 문자열
-std::string dist_str[DIST] = {"1m 이내", "2m 이내", "3m 이내", "4m 이내", "5m 이내", "6m 이내", "7m 이내", "8m 이내", "9m 이내"}; // 거리 문자열
+std::string dist_str[DIST] = {"1.5m 이내", "2.5m 이내", "3.5m 이내", "4.5m 이내", "5.5m 이내", "6.5m 이내", "7.5m 이내", "8.5m 이내", "9.5m 이내"}; // 거리 문자열
 std::deque<std::vector<std::vector<int>>> dng_dir; // 위험 정보 [저장순서][방향][거리]
-std::deque<std::vector<std::vector<int>>> dng_dir_cnt; // 위험 정보 카운트 [저장순서][방향][거리]
+//std::deque<std::vector<std::vector<int>>> dng_dir_cnt; // 위험 정보 카운트 [저장순서][방향][거리]
 std::deque<std::vector<float>> position; // 위치정보 [저장순서][각도]
 std::deque<std::vector<float>> velocity; // 속도정보 [저장순서][각도]
 std::deque<std::vector<float>> acceleration; // 가속도정보 [저장순서][각도]
@@ -42,7 +42,7 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
     float cnt_sum = 0.; // 사용 가능한 데이터 개수
     float cnt_fail = 0.; // 사용 불가능한 데이터 개수
     std::vector<std::vector<int>> dir(DIR, std::vector<int>(DIST, 0)); // 임시 위험 정보 [방향][거리]
-    std::vector<std::vector<int>> dir_cnt(DIR-1, std::vector<int>(DIST-1, 0)); // 임시 위험 정보 합 [방향][거리]
+    //std::vector<std::vector<int>> dir_cnt(DIR-1, std::vector<int>(DIST-1, 0)); // 임시 위험 정보 합 [방향][거리]
     std::vector<float> ang_dist(SIZE, 0); // 거리의 합
     std::vector<float> cnt(SIZE, 0); // 데이터 개수
     std::vector<float> mn_dist(SIZE, 0); // 거리의 평균 (거리의 합 / 데이터 개수)
@@ -53,7 +53,7 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
     // 오래된 데이터 삭제
     if (position.size()==DEQUE_SIZE) { // deque 크기 제한을 초과하면
         dng_dir.pop_front(); // 위험 정보 삭제
-        dng_dir_cnt.pop_front(); // 위험 정보 합 삭제
+        //dng_dir_cnt.pop_front(); // 위험 정보 합 삭제
         position.pop_front(); // 오래된 위치 정보 삭제
         velocity.pop_front(); // 오래된 속도 정보 삭제
         acceleration.pop_front(); // 오래된 가속도 정보 삭제
@@ -103,42 +103,36 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
             if (ang_tmp >= 0 && ang_tmp < 270) {
                 ang_tmp /= 270/DIR;
                 for (int j=0; j<DIST; j++){
-                    if (ang_vel[i] > MIN_SPEED + j*0.2 && mn_dist[i] < j) {
+                    if (ang_vel[i] > MIN_SPEED + j*0.5 && ang_vel[i] < MIN_SPEED + 1 + j*0.8 && mn_dist[i] < j + 1.5 && mn_dist[i] > j-0.5) { // 속도 걸러내기
                         dir[ang_tmp][j]++;
-                        printf("거리 : %f, 속도 : %f, 가속도 : %f\n", mn_dist[i], ang_vel[i], ang_acl[i]);
+                        printf("방향 : %d, 거리 : %f, 속도 : %f, 가속도 : %f\n", ang_tmp, mn_dist[i], ang_vel[i], ang_acl[i]);
                     }
                 }
             }
-            for(int j=0; j<DIR-1; j++){
-                for(int k=0; k<DIST-1; k++){
-                    dir_cnt[j][k] += dir[j][k] + dir[j+1][k] + dir[j][k+1] + dir[j+1][k+1]; // 4개 단위로 검사
-                }
-            }
+            // for(int j=0; j<DIR-1; j++){
+            //     for(int k=0; k<DIST-1; k++){
+            //         dir_cnt[j][k] += dir[j][k] + dir[j+1][k] + dir[j][k+1] + dir[j+1][k+1]; // 4개 단위로 검사
+            //     }
+            // }
         }
     }
 
     // 위험, 위치, 속도, 가속도, 시간 정보 갱신
     dng_dir.push_back(dir); // 위험 정보 갱신
-    dng_dir_cnt.push_back(dir_cnt); // 위험 정보 합 갱신
+    //dng_dir_cnt.push_back(dir_cnt); // 위험 정보 합 갱신
     position.push_back(mn_dist); // 위치 정보 갱신
     velocity.push_back(ang_vel); // 속도 정보 갱신
     acceleration.push_back(ang_vel); // 가속도 정보 갱신
     time_info.push_back(time_tmp); // 시간 정보 갱신
 
     // 덱에 쌓인 위험 신호 체크
-    std::vector<std::vector<int>> counting_danger(DIR-1, std::vector<int>(DIST-1, 0)); // 덱에 쌓인 위험 신호 카운트
-    for (int i=0; i<dng_dir_cnt.size(); i++) {
-        for (int j=0; j<DIR-1; j++) {
-            for (int k=0; k<DIST-1; k++) {
-                if (dng_dir_cnt[i][j][k] > 0) counting_danger[j][k]++;
-                if (counting_danger[j][k] == DEQUE_SIZE-1){
-                    for (int m=j; m<j+2; m++){
-                        for (int n=k; n<k+2; n++){
-                            if (dir[m][n] > 0) {
-                                std::cout << dir_str[m] << " " << dist_str[n] << " " << dir[m][n] << "개 각도에서 위험 감지!!\n";
-                            }
-                        }
-                    }
+    std::vector<std::vector<int>> counting_danger(DIR, std::vector<int>(DIST, 0)); // 덱에 쌓인 위험 신호 카운트
+    for (int i=0; i<dng_dir.size(); i++) {
+        for (int j=0; j<DIR; j++) {
+            for (int k=0; k<DIST; k++) {
+                if (dng_dir[i][j][k] > k/2) counting_danger[j][k]++;
+                if (counting_danger[j][k] == DEQUE_SIZE){
+                    std::cout << dir_str[j] << " " << dist_str[k] << " " << dir[j][k] << "개 각도에서 위험 감지!!\n";
                 }
             }
         }
